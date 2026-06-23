@@ -1,161 +1,163 @@
-# Multi-Tenant SaaS Notes Application
+# Multi-Tenant Notes
 
-A production-ready multi-tenant SaaS application built with Next.js, featuring tenant isolation, subscription management, and role-based access control.
+Multi-tenant notes application with a Next.js frontend and an Express/MongoDB backend.
 
-## Multi-Tenancy Approach
+## Final Architecture
 
-This application uses a **shared schema with tenant isolation** approach:
-- Single database with all tenant data
-- Each table includes a `tenant_id` column for isolation
-- Application-level tenant filtering ensures data separation
-- JWT tokens include tenant information for request-level isolation
+This repository is a Next.js frontend plus Express backend. API behavior is implemented only in Express.
 
-### Benefits of This Approach:
-- Cost-effective (single database)
-- Easy to maintain and backup
-- Simple cross-tenant analytics
-- Efficient resource utilization
+```text
+Browser
+  |
+  | http://localhost:3000
+  v
+Next.js frontend
+  |
+  | /api/* rewrite using API_SERVER_URL
+  v
+Express API server
+  |
+  | Mongoose models scoped by tenantId
+  v
+MongoDB Atlas
+```
 
-## Architecture
+Removed architecture decisions:
 
-- **Backend**: Next.js API Routes with Supabase PostgreSQL
-- **Frontend**: Next.js with React and Tailwind CSS
-- **Authentication**: JWT-based with role and tenant isolation
-- **Database**: PostgreSQL with Row Level Security (RLS)
+- No Next.js API route implementation remains under `app/api`.
+- `/api/auth/*`, `/api/notes/*`, and `/api/tenants/*` are Express routes.
+- Next.js proxies frontend `/api/*` requests to `API_SERVER_URL`.
 
-## Seeded Test Accounts
+## Security Model
 
-All accounts use password: `password`
+- Public registration always creates role `user`.
+- `role` in the public registration request body is ignored.
+- Authenticated `admin` and `superadmin` users may create users in their own tenant with `POST /api/auth/users`.
+- Only `superadmin` can create another `superadmin`.
+- Role middleware supports `user`, `admin`, and `superadmin`.
+- Tenant creation always uses server default plan `free`.
+- `plan` in tenant creation and upgrade request bodies is ignored.
+- Tenant upgrade can only set the authenticated tenant to the server-selected `pro` plan.
+- Notes are always queried with `tenantId: req.tenant._id`.
+- Tenant upgrades require authenticated tenant slug to match the URL slug.
 
-| Email | Role | Tenant | Plan |
-|-------|------|--------|------|
-| admin@acme.test | Admin | acme | Free |
-| user@acme.test | Member | acme | Free |
-| admin@globex.test | Admin | globex | Free |
-| user@globex.test | Member | globex | Free |
+## Endpoints
 
-## Features
+- `GET /health`
+- `POST /api/tenants`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/users`
+- `GET /api/notes`
+- `POST /api/notes`
+- `GET /api/notes/:id`
+- `PUT /api/notes/:id`
+- `DELETE /api/notes/:id`
+- `POST /api/tenants/:slug/upgrade`
 
-### Authentication & Authorization
-- JWT-based login system
-- Role-based access control (Admin/Member)
-- Tenant isolation at the token level
+## Environment
 
-### Subscription Plans
-- **Free Plan**: Maximum 3 notes per tenant
-- **Pro Plan**: Unlimited notes
-- Admin-only subscription upgrades
+Create `.env` from `.env.example`.
 
-### Notes Management
-- Create, read, update, delete notes
-- Tenant isolation (users only see their tenant's notes)
-- Subscription plan enforcement
+```bash
+NODE_ENV=development
+PORT=4000
+API_SERVER_URL=http://localhost:4000
+MASTER_DB_URL=mongodb+srv://<user>:<password>@<cluster>/<database>?retryWrites=true&w=majority
+JWT_SECRET=replace-with-a-long-random-secret
+CORS_ORIGIN=http://localhost:3000
+```
 
-### API Endpoints
-
-#### Authentication
-- `POST /api/auth/login` - User login
-
-#### Health Check
-- `GET /api/health` - Application health status
-
-#### Notes
-- `POST /api/notes` - Create note
-- `GET /api/notes` - List tenant notes
-- `GET /api/notes/[id]` - Get specific note
-- `PUT /api/notes/[id]` - Update note
-- `DELETE /api/notes/[id]` - Delete note
-
-#### Tenant Management
-- `POST /api/tenants/[slug]/upgrade` - Upgrade tenant to Pro (Admin only)
+`MASTER_DB_URL`, `JWT_SECRET`, and `PORT` are required. `CORS_ORIGIN` is required in production.
 
 ## Local Development
 
-1. **Clone and install dependencies**:
-   ```bash
-   npm install
-   ```
+Install dependencies:
 
-2. **Set up Supabase**:
-   - Click "Connect to Supabase" in the top right
-   - The database will be automatically configured
+```bash
+npm install
+```
 
-3. **Run the development server**:
-   ```bash
-   npm run dev
-   ```
+Terminal 1, run the backend:
 
-4. **Access the application**:
-   - Frontend: http://localhost:3000
-   - API: http://localhost:3000/api
+```bash
+npm run dev:backend
+```
 
-## Database Schema
+Terminal 2, run the frontend:
 
-### Tenants Table
-- `id`: UUID primary key
-- `slug`: Unique tenant identifier (e.g., 'acme', 'globex')
-- `name`: Display name
-- `plan`: Subscription plan ('free' or 'pro')
+```bash
+npm run dev:frontend
+```
 
-### Users Table
-- `id`: UUID primary key
-- `email`: User email (unique)
-- `password_hash`: Encrypted password
-- `role`: User role ('admin' or 'member')
-- `tenant_id`: Foreign key to tenants table
+Open `http://localhost:3000`. The frontend rewrites `/api/*` to `http://localhost:4000` unless `API_SERVER_URL` is changed.
 
-### Notes Table
-- `id`: UUID primary key
-- `title`: Note title
-- `content`: Note content
-- `user_id`: Foreign key to users table
-- `tenant_id`: Foreign key to tenants table (for tenant isolation)
+Seed demo data:
+
+```bash
+npm run seed
+```
+
+Demo password for all seeded users is `password`.
+
+Run tests:
+
+```bash
+npm test
+```
+
+Build frontend:
+
+```bash
+npm run build
+```
 
 ## Deployment
 
-### Vercel Deployment
-1. Connect your GitHub repository to Vercel
-2. Supabase environment variables will be automatically configured
-3. Deploy with automatic builds on push
+Deploy the backend and frontend as separate services.
 
-### Environment Variables
-The following are automatically configured with Supabase:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+Backend service:
 
-## Security Features
+- Build command: `npm install`
+- Start command: `npm run start:backend`
+- Environment:
+  - `NODE_ENV=production`
+  - `PORT=<provider-port>`
+  - `MASTER_DB_URL=<mongodb-atlas-url>`
+  - `JWT_SECRET=<long-random-secret>`
+  - `CORS_ORIGIN=https://your-frontend-domain.com`
 
-- JWT token validation on all protected routes
-- Tenant isolation enforced at database and application level
-- Row Level Security (RLS) policies in Supabase
-- Password hashing with bcryptjs
-- CORS configuration for external API access
-- Input validation and sanitization
+Frontend service:
 
-## API Testing
+- Build command: `npm install && npm run build`
+- Start command: `npm start`
+- Environment:
+  - `API_SERVER_URL=https://your-backend-domain.com`
 
-Use tools like Postman or curl to test the API:
+Verify backend health:
 
 ```bash
-# Login
-curl -X POST http://localhost:3000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@acme.test","password":"password"}'
-
-# Create note (with JWT token)
-curl -X POST http://localhost:3000/api/notes \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{"title":"Test Note","content":"Note content"}'
+curl https://your-backend-domain.com/health
 ```
 
-## Technology Stack
+Expected response:
 
-- **Framework**: Next.js 13+
-- **Database**: PostgreSQL (Supabase)
-- **Authentication**: JWT
-- **Styling**: Tailwind CSS
-- **UI Components**: shadcn/ui
-- **Icons**: Lucide React
-- **Deployment**: Vercel
+```json
+{ "status": "ok" }
+```
+
+## Tenant Isolation Verification
+
+Tenant-owned data is stored with `tenantId`. Protected note operations load the tenant from the authenticated user and include `tenantId` in list, detail, update, and delete queries. The test suite asserts these query filters so a note ID from another tenant cannot be read, updated, or deleted through the API.
+
+## Useful Commands
+
+```bash
+npm run dev:backend
+npm run dev:frontend
+npm run seed
+npm test
+npm run build
+npm run start:backend
+npm start
+```

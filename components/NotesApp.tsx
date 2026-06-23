@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 interface User {
   id: string;
   email: string;
-  role: 'admin' | 'member';
+  role: 'user' | 'admin' | 'superadmin';
   tenant: {
     id: string;
     slug: string;
@@ -50,7 +50,7 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({ title: '', content: '' });
 
-  const fetchNotes = async () => {
+  const fetchNotes = useCallback(async () => {
     try {
       const response = await fetch('/api/notes', {
         headers: {
@@ -64,17 +64,17 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
       }
 
       const data = await response.json();
-      setNotes(data.notes);
+      setNotes(data.data.notes);
     } catch (error) {
       toast.error('Failed to load notes');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchNotes();
-  }, [token]);
+  }, [fetchNotes]);
 
   const handleCreateNote = async () => {
     if (!formData.title.trim()) {
@@ -99,7 +99,7 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create note');
+        throw new Error(data.message || 'Failed to create note');
       }
 
       toast.success('Note created successfully');
@@ -133,7 +133,7 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to update note');
+        throw new Error(data.message || 'Failed to update note');
       }
 
       toast.success('Note updated successfully');
@@ -185,7 +185,7 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to upgrade');
+        throw new Error(data.message || 'Failed to upgrade');
       }
 
       toast.success('Successfully upgraded to Pro plan!');
@@ -214,6 +214,8 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
   };
 
   const canCreateMoreNotes = user.tenant.plan === 'pro' || notes.length < 3;
+  const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+  const roleLabel = user.role === 'superadmin' ? 'Superadmin' : user.role === 'admin' ? 'Admin' : 'User';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50">
@@ -256,22 +258,22 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
                   )}
                 </Badge>
                 <Badge 
-                  variant={user.role === 'admin' ? 'default' : 'outline'}
+                  variant={isAdmin ? 'default' : 'outline'}
                   className={`px-3 py-1 font-semibold ${
-                    user.role === 'admin' 
+                    isAdmin
                       ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg' 
                       : 'bg-white text-gray-600 border border-gray-200'
                   }`}
                 >
-                  {user.role === 'admin' ? (
+                  {isAdmin ? (
                     <>
                       <Crown className="w-3 h-3 mr-1" />
-                      Admin
+                      {roleLabel}
                     </>
                   ) : (
                     <>
                       <Users className="w-3 h-3 mr-1" />
-                      Member
+                      User
                     </>
                   )}
                 </Badge>
@@ -280,7 +282,7 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-medium text-gray-700">{user.email}</p>
-                <p className="text-xs text-gray-500">{user.role === 'admin' ? 'Administrator' : 'Team Member'}</p>
+                <p className="text-xs text-gray-500">{isAdmin ? roleLabel : 'Team User'}</p>
               </div>
               <Button 
                 variant="outline" 
@@ -315,7 +317,7 @@ export function NotesApp({ user, token, onLogout }: NotesAppProps) {
                   </p>
                 </div>
               </div>
-              {user.role === 'admin' && (
+              {isAdmin && (
                 <Button
                   size="sm" 
                   onClick={handleUpgradeTenant}

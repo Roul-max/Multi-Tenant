@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 interface User {
   id: string;
   email: string;
-  role: 'admin' | 'member';
+  role: 'user' | 'admin' | 'superadmin';
   tenant: {
     id: string;
     slug: string;
@@ -26,9 +26,9 @@ interface LoginFormProps {
 
 const testAccounts = [
   { email: 'admin@acme.test', role: 'Admin', tenant: 'Acme Corporation', color: 'from-indigo-500 to-purple-600' },
-  { email: 'user@acme.test', role: 'Member', tenant: 'Acme Corporation', color: 'from-indigo-500 to-purple-600' },
+  { email: 'user@acme.test', role: 'User', tenant: 'Acme Corporation', color: 'from-indigo-500 to-purple-600' },
   { email: 'admin@globex.test', role: 'Admin', tenant: 'Globex Corporation', color: 'from-purple-500 to-pink-600' },
-  { email: 'user@globex.test', role: 'Member', tenant: 'Globex Corporation', color: 'from-purple-500 to-pink-600' },
+  { email: 'user@globex.test', role: 'User', tenant: 'Globex Corporation', color: 'from-purple-500 to-pink-600' },
 ];
 
 export function LoginForm({ onLogin }: LoginFormProps) {
@@ -54,15 +54,17 @@ export function LoginForm({ onLogin }: LoginFormProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.message || 'Login failed');
       }
 
-      // Store in localStorage
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      const loginData = data.data;
 
-      toast.success(`Welcome back, ${data.user.email}!`);
-      onLogin(data.token, data.user);
+      // Store in localStorage
+      localStorage.setItem('token', loginData.token);
+      localStorage.setItem('user', JSON.stringify(loginData.user));
+
+      toast.success(`Welcome back, ${loginData.user.email}!`);
+      onLogin(loginData.token, loginData.user);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
       setError(errorMessage);

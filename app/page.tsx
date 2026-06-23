@@ -8,7 +8,7 @@ import { Toaster } from '@/components/ui/sonner';
 interface User {
   id: string;
   email: string;
-  role: 'admin' | 'member';
+  role: 'user' | 'admin' | 'superadmin';
   tenant: {
     id: string;
     slug: string;
