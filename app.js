@@ -12,27 +12,32 @@ const { attachResponseHelpers } = require("./middlewares/responseHandler");
 
 const app = express();
 
+const normalizeOrigin = (origin) => origin.trim().replace(/\/+$/, "");
+
 const allowedOrigins = (process.env.CORS_ORIGIN || "")
   .split(",")
-  .map((origin) => origin.trim())
+  .map(normalizeOrigin)
   .filter(Boolean);
 
+app.set("trust proxy", 1);
 app.use(helmet());
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin && process.env.NODE_ENV !== "production") {
+      if (!origin) {
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin)) {
+      const normalizedOrigin = normalizeOrigin(origin);
+      if (allowedOrigins.includes(normalizedOrigin)) {
         return callback(null, true);
       }
 
-      if (process.env.NODE_ENV !== "production" && /^https?:\/\/localhost:\d+$/.test(origin || "")) {
+      if (process.env.NODE_ENV !== "production" && /^https?:\/\/localhost:\d+$/.test(normalizedOrigin)) {
         return callback(null, true);
       }
 
+      console.warn("[CORS] Rejected origin:", origin);
       return callback(new Error("CORS origin is not allowed"));
     },
     credentials: true,
