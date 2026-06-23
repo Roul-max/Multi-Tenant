@@ -8,6 +8,7 @@ const connectDatabase = async () => {
   });
 
   console.log("Connected to MongoDB");
+  console.log("[AUTH_DEBUG] Connected DB:", mongoose.connection.name);
 };
 
 module.exports = connectDatabase;

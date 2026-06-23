@@ -102,8 +102,23 @@ const createUser = async (req, res, next) => {
 
 const login = async (req, res, next) => {
   try {
+    console.log("[AUTH_DEBUG] Login attempt", {
+      email: req.body.email,
+    });
+
     const { email, password } = req.body;
+    console.log("[AUTH_DEBUG] Searching user", email);
     const user = await User.findOne({ email }).select("+passwordHash");
+    console.log("[AUTH_DEBUG] User found:", !!user);
+
+    if (user) {
+      console.log("[AUTH_DEBUG] User details", {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        hasPasswordHash: !!user.passwordHash,
+      });
+    }
 
     if (!user) {
       return res.status(401).json({
@@ -112,8 +127,10 @@ const login = async (req, res, next) => {
       });
     }
 
-    const passwordMatches = await bcrypt.compare(password, user.passwordHash);
-    if (!passwordMatches) {
+    console.log("[AUTH_DEBUG] Comparing password");
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    console.log("[AUTH_DEBUG] Password match:", isMatch);
+    if (!isMatch) {
       return res.status(401).json({
         success: false,
         message: "Invalid email or password",
@@ -128,7 +145,9 @@ const login = async (req, res, next) => {
       });
     }
 
+    console.log("[AUTH_DEBUG] Generating token");
     const token = signToken(user, tenant);
+    console.log("[AUTH_DEBUG] Login successful");
     return res.success({ token, user: sanitizeUser(user, tenant) });
   } catch (error) {
     next(error);

@@ -5,6 +5,9 @@ const connectDatabase = require("./config/database");
 const validateEnv = require("./config/validateEnv");
 
 const startServer = async () => {
+  console.log("[AUTH_DEBUG] MASTER_DB_URL exists:", !!process.env.MASTER_DB_URL);
+  console.log("[AUTH_DEBUG] JWT_SECRET exists:", !!process.env.JWT_SECRET);
+
   validateEnv();
   await connectDatabase();
 
