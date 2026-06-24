@@ -5,7 +5,12 @@ const rateLimit = require("express-rate-limit");
 const morgan = require("morgan");
 
 const authRoutes = require("./routes/authRoutes");
+const activityRoutes = require("./routes/activityRoutes");
+const analyticsRoutes = require("./routes/analyticsRoutes");
+const docsRoutes = require("./routes/docsRoutes");
 const noteRoutes = require("./routes/noteRoutes");
+const profileRoutes = require("./routes/profileRoutes");
+const teamRoutes = require("./routes/teamRoutes");
 const tenantRoutes = require("./routes/tenantRoutes");
 const { errorHandler, notFoundHandler } = require("./middlewares/errorHandler");
 const { attachResponseHelpers } = require("./middlewares/responseHandler");
@@ -43,7 +48,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(
@@ -64,8 +69,13 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
+app.use("/api/docs", docsRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/activity", activityRoutes);
+app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notes", noteRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/api/team", teamRoutes);
 app.use("/api/tenants", tenantRoutes);
 
 app.use(notFoundHandler);

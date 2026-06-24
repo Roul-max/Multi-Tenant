@@ -5,14 +5,22 @@ process.env.JWT_SECRET = "test-secret";
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { validationResult } = require("express-validator");
 
 const { register } = require("../controllers/authController");
+const authController = require("../controllers/authController");
+const analyticsController = require("../controllers/analyticsController");
+const profileController = require("../controllers/profileController");
+const teamController = require("../controllers/teamController");
+const { authenticate } = require("../middlewares/authMiddleware");
 const { createTenant } = require("../controllers/tenantController");
 const { requireAdmin } = require("../middlewares/authMiddleware");
+const Activity = require("../models/Activity");
 const noteController = require("../controllers/noteController");
 const Note = require("../models/Note");
 const Tenant = require("../models/Tenant");
 const User = require("../models/User");
+const { updateProfileValidator } = require("../validators/profileValidators");
 
 const createResponse = () => {
   const res = {
@@ -221,4 +229,191 @@ test("note detail, update, and delete queries include tenantId", async (t) => {
     assert.equal(query._id, req.params.id);
     assert.equal(query.tenantId, tenant._id);
   }
+});
+
+test("admin users cannot invite or promote owners", async (t) => {
+  const originalFindOneAndUpdate = User.findOneAndUpdate;
+
+  t.after(() => {
+    User.findOneAndUpdate = originalFindOneAndUpdate;
+  });
+
+  let updateCalled = false;
+  User.findOneAndUpdate = async () => {
+    updateCalled = true;
+    return null;
+  };
+
+  const req = {
+    tenant: { _id: "tenant-a" },
+    user: { _id: "admin-a", role: "admin" },
+    params: { id: "64b7f0f0f0f0f0f0f0f0f0f0" },
+    body: { role: "owner" },
+  };
+
+  const promoteRes = await runController(teamController.updateTeamMemberRole, req);
+  assert.equal(promoteRes.statusCode, 403);
+  assert.equal(updateCalled, false);
+
+  const inviteRes = await runController(teamController.inviteTeamMember, {
+    tenant: { _id: "tenant-a" },
+    user: { _id: "admin-a", role: "admin" },
+    body: { email: "owner@test.local", role: "owner" },
+  });
+  assert.equal(inviteRes.statusCode, 403);
+});
+
+test("disabled users cannot log in or use authenticated APIs", async (t) => {
+  const originalFindOne = User.findOne;
+  const originalFindById = User.findById;
+  const originalCompare = bcrypt.compare;
+  const originalVerify = jwt.verify;
+
+  t.after(() => {
+    User.findOne = originalFindOne;
+    User.findById = originalFindById;
+    bcrypt.compare = originalCompare;
+    jwt.verify = originalVerify;
+  });
+
+  User.findOne = () => ({
+    select: async () => ({
+      _id: "user-disabled",
+      email: "disabled@test.local",
+      status: "disabled",
+      passwordHash: "hash",
+    }),
+  });
+  bcrypt.compare = async () => true;
+
+  const loginRes = await runController(authController.login, {
+    body: { email: "disabled@test.local", password: "password123" },
+  });
+  assert.equal(loginRes.statusCode, 403);
+
+  jwt.verify = () => ({ userId: "user-disabled" });
+  User.findById = () => ({
+    select: async () => ({
+      _id: "user-disabled",
+      email: "disabled@test.local",
+      role: "user",
+      status: "disabled",
+      tenantId: "tenant-a",
+    }),
+  });
+
+  const apiRes = createResponse();
+  let nextCalled = false;
+  await authenticate(
+    { get: () => "Bearer token" },
+    apiRes,
+    () => {
+      nextCalled = true;
+    }
+  );
+
+  assert.equal(apiRes.statusCode, 403);
+  assert.equal(nextCalled, false);
+});
+
+test("team, analytics, and profile operations remain tenant/user scoped", async (t) => {
+  const originalFindUsers = User.find;
+  const originalCountUsers = User.countDocuments;
+  const originalCountNotes = Note.countDocuments;
+  const originalCountActivity = Activity.countDocuments;
+  const originalAggregateNotes = Note.aggregate;
+  const originalCreateActivity = Activity.create;
+
+  t.after(() => {
+    User.find = originalFindUsers;
+    User.countDocuments = originalCountUsers;
+    Note.countDocuments = originalCountNotes;
+    Activity.countDocuments = originalCountActivity;
+    Note.aggregate = originalAggregateNotes;
+    Activity.create = originalCreateActivity;
+  });
+
+  let teamQuery;
+  User.find = (query) => {
+    teamQuery = query;
+    return { sort: async () => [] };
+  };
+
+  await runController(teamController.listTeamMembers, { tenant: { _id: "tenant-team" } });
+  assert.deepEqual(teamQuery, { tenantId: "tenant-team" });
+
+  const queries = [];
+  Note.countDocuments = async (query) => {
+    queries.push(query);
+    return 0;
+  };
+  User.countDocuments = async (query) => {
+    queries.push(query);
+    return 0;
+  };
+  Activity.countDocuments = async (query) => {
+    queries.push(query);
+    return 0;
+  };
+  Note.aggregate = async (pipeline) => {
+    queries.push(pipeline[0].$match);
+    return [];
+  };
+
+  const analyticsRes = await runController(analyticsController.getAnalytics, {
+    tenant: { _id: "tenant-analytics", plan: "free" },
+  });
+
+  assert.equal(analyticsRes.statusCode, 200);
+  assert.equal(analyticsRes.body.data.notesCreatedOverTime.length, 14);
+  assert(analyticsRes.body.data.notesCreatedOverTime.every((item) => item.count === 0));
+  assert(queries.every((query) => query.tenantId === "tenant-analytics"));
+
+  const savedUser = {
+    _id: "user-profile",
+    name: "",
+    email: "profile@test.local",
+    avatarUrl: "",
+    role: "user",
+    saveCalled: false,
+    async save() {
+      this.saveCalled = true;
+    },
+  };
+  Activity.create = async () => ({});
+
+  const profileRes = await runController(profileController.updateProfile, {
+    tenant: { _id: "tenant-profile" },
+    user: savedUser,
+    body: { name: "Scoped User", avatarUrl: "" },
+  });
+  assert.equal(profileRes.statusCode, 200);
+  assert.equal(savedUser.saveCalled, true);
+  assert.equal(profileRes.body.data.profile.id, savedUser._id);
+});
+
+test("avatar validation only accepts png, jpeg, and webp data URLs under 1MB", async () => {
+  const validPng = `data:image/png;base64,${Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64")}`;
+  const validReq = { body: { avatarUrl: validPng } };
+  for (const validator of updateProfileValidator) {
+    await validator.run(validReq);
+  }
+  assert.equal(validationResult(validReq).isEmpty(), true);
+
+  const svgPayload = Buffer.from("<svg><script>alert(1)</script></svg>").toString("base64");
+  const svgReq = { body: { avatarUrl: `data:image/svg+xml;base64,${svgPayload}` } };
+  for (const validator of updateProfileValidator) {
+    await validator.run(svgReq);
+  }
+  assert.equal(validationResult(svgReq).isEmpty(), false);
+
+  const oversizePayload = Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff]),
+    Buffer.alloc(1024 * 1024 + 1),
+  ]).toString("base64");
+  const oversizeReq = { body: { avatarUrl: `data:image/jpeg;base64,${oversizePayload}` } };
+  for (const validator of updateProfileValidator) {
+    await validator.run(oversizeReq);
+  }
+  assert.equal(validationResult(oversizeReq).isEmpty(), false);
 });

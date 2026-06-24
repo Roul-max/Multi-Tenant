@@ -3,6 +3,12 @@ const { DEFAULT_ROLE, ROLE_VALUES } = require("../config/security");
 
 const userSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+      trim: true,
+      maxlength: 120,
+      default: "",
+    },
     email: {
       type: String,
       required: true,
@@ -26,6 +32,21 @@ const userSchema = new mongoose.Schema(
       ref: "Tenant",
       required: true,
       index: true,
+    },
+    avatarUrl: {
+      type: String,
+      trim: true,
+      maxlength: 1500000,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["active", "invited", "disabled"],
+      default: "active",
+      index: true,
+    },
+    invitedAt: {
+      type: Date,
     },
   },
   {

@@ -2,8 +2,8 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Notes App',
-  description: 'A production-ready multi-tenant notes application with subscription management',
+  title: 'NotesFlow',
+  description: 'A multi-tenant SaaS workspace for team notes and knowledge management',
 };
 
 export default function RootLayout({

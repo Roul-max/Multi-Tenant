@@ -17,11 +17,18 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.slice(7);
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findById(payload.userId).select("_id email role tenantId");
+    const user = await User.findById(payload.userId).select("_id name email avatarUrl role status tenantId");
     if (!user) {
       return res.status(401).json({
         success: false,
         message: "Authenticated user no longer exists",
+      });
+    }
+
+    if (user.status === "disabled") {
+      return res.status(403).json({
+        success: false,
+        message: "This account has been disabled",
       });
     }
 

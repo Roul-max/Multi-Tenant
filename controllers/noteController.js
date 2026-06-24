@@ -1,4 +1,5 @@
 const Note = require("../models/Note");
+const { recordActivity } = require("../services/activityService");
 
 const FREE_PLAN_NOTE_LIMIT = 3;
 
@@ -49,6 +50,15 @@ const createNote = async (req, res, next) => {
     });
     await note.populate("userId", "email");
 
+    await recordActivity({
+      tenantId: req.tenant._id,
+      actorId: req.user?._id,
+      action: "note.created",
+      entityType: "note",
+      entityId: note._id,
+      metadata: { title: note.title },
+    });
+
     return res.success({ note: serializeNote(note) }, 201);
   } catch (error) {
     next(error);
@@ -98,6 +108,15 @@ const updateNote = async (req, res, next) => {
 
     await note.populate("userId", "email");
 
+    await recordActivity({
+      tenantId: req.tenant._id,
+      actorId: req.user?._id,
+      action: "note.updated",
+      entityType: "note",
+      entityId: note._id,
+      metadata: { title: note.title },
+    });
+
     return res.success({ note: serializeNote(note) });
   } catch (error) {
     next(error);
@@ -117,6 +136,15 @@ const deleteNote = async (req, res, next) => {
         message: "Note not found",
       });
     }
+
+    await recordActivity({
+      tenantId: req.tenant._id,
+      actorId: req.user?._id,
+      action: "note.deleted",
+      entityType: "note",
+      entityId: note._id,
+      metadata: { title: note.title },
+    });
 
     return res.success({ deleted: true });
   } catch (error) {

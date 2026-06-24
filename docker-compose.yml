@@ -1,0 +1,29 @@
+services:
+  api:
+    build: .
+    command: npm run start:backend
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MASTER_DB_URL: ${MASTER_DB_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  web:
+    build: .
+    command: npm run start
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_SERVER_URL: http://api:4000
+    depends_on:
+      api:
+        condition: service_healthy
